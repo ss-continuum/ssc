@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/ss-continuum/ssc/pkg/bytestream"
 	"github.com/ss-continuum/ssc/pkg/logbytes"
 )
 
@@ -32,12 +33,8 @@ func PingV1(ip string, port int, debug bool) (PingV1Resp, error) {
 
 	then := uint32(time.Now().UnixMilli())
 
-	C2SSimplePingV1 := []byte{
-		byte((then >> 24) & 0xff),
-		byte((then >> 16) & 0xff),
-		byte((then >> 8) & 0xff),
-		byte(then & 0xff),
-	}
+	C2SSimplePingV1 := make([]byte, 4)
+	endian.PutUint32(C2SSimplePingV1, then)
 
 	if debug {
 		logbytes.LogPrefix(C2SSimplePingV1, "C2S |")
@@ -48,17 +45,23 @@ func PingV1(ip string, port int, debug bool) (PingV1Resp, error) {
 	}
 
 	respBytes := make([]byte, 8)
-	if _, err := conn.Read(respBytes); err != nil {
+	n, err := conn.Read(respBytes)
+	if err != nil {
 		return resp, errors.Wrap(err, "conn.Read")
 	}
 	if debug {
 		logbytes.LogPrefix(respBytes, "S2C |")
 	}
+	in := bytestream.New(respBytes[:n], endian)
 
 	now := uint32(time.Now().UnixMilli())
 
-	resp.PlayerCount = uint32(respBytes[0]) + uint32(respBytes[1])<<8 + uint32(respBytes[2])<<16 + uint32(respBytes[3])<<24
-	resp.ClientTime = uint32(respBytes[4]) + uint32(respBytes[5])<<8 + uint32(respBytes[6])<<16 + uint32(respBytes[7])<<24
+	if err := in.ReadUint32Var(&resp.PlayerCount); err != nil {
+		return resp, errors.Wrap(err, "in.ReadUint32Var")
+	}
+	if err := in.ReadUint32Var(&resp.ClientTime); err != nil {
+		return resp, errors.Wrap(err, "in.ReadUint32Var")
+	}
 
 	resp.Lag = now - then
 
