@@ -6,7 +6,7 @@ func lines(b []byte) []string {
 	var lines []string
 	var line string
 
-	for i := 0; i < len(b); i++ {
+	for i := 0; i < len(b); i += 16 {
 		for k := 0; k < 16; k++ {
 			if k == 8 {
 				line += " "
@@ -38,7 +38,6 @@ func lines(b []byte) []string {
 
 		lines = append(lines, line)
 		line = ""
-		i += 16
 	}
 	return lines
 }
