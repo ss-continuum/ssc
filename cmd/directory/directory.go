@@ -13,6 +13,7 @@ import (
 	"github.com/peterbourgon/ff/v3/ffcli"
 	"github.com/pkg/errors"
 	"github.com/ss-continuum/ssc/pkg/bytestream"
+	"github.com/ss-continuum/ssc/pkg/directory"
 	"github.com/ss-continuum/ssc/pkg/packetmap"
 )
 
@@ -20,8 +21,8 @@ const directoryServerPort = 4990
 
 var endian = binary.LittleEndian
 
-func requestDirectoryList(addr string, debug bool) ([]DirectoryEntry, error) {
-	var list []DirectoryEntry
+func requestDirectoryList(addr string, debug bool) (directory.Directory, error) {
+	var ret directory.Directory
 
 	conn, err := connect(addr)
 	if err != nil {
@@ -43,13 +44,13 @@ func requestDirectoryList(addr string, debug bool) ([]DirectoryEntry, error) {
 		data, err := conn.ReadWithDeadline(time.Second * 5)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				return nil, errors.Wrap(err, "conn.ReadWithDeadline")
+				return ret, errors.Wrap(err, "conn.ReadWithDeadline")
 			}
 			log.Println(err)
 			timeoutCount++
 
 			if timeoutCount >= 5 {
-				return nil, errors.New("timeout x 5")
+				return ret, errors.New("timeout x 5")
 			}
 
 			continue
@@ -81,15 +82,15 @@ func requestDirectoryList(addr string, debug bool) ([]DirectoryEntry, error) {
 				consolidatedData := packets.Bytes()
 				packets.Clear()
 
-				entryList, err := NewDirectoryEntryList(bytestream.New(consolidatedData, endian))
+				entryList, err := directory.NewFromStream(bytestream.New(consolidatedData, endian))
 				if err != nil {
 					log.Println("decodeDirectoryPayload:", err)
 				}
 
-				list = entryList
+				ret = entryList
 
 				if err := conn.Disconnect(); err != nil {
-					return nil, errors.Wrap(err, "conn.Disconnect")
+					return ret, errors.Wrap(err, "conn.Disconnect")
 				}
 				break
 			} else if packetData[0] == 0x00 && packetData[1] == 0x0a {
@@ -98,15 +99,15 @@ func requestDirectoryList(addr string, debug bool) ([]DirectoryEntry, error) {
 					consolidatedData := packets0x0a.Bytes()
 					packets0x0a.Clear()
 
-					entryList, err := NewDirectoryEntryList(bytestream.New(consolidatedData, endian))
+					entryList, err := directory.NewFromStream(bytestream.New(consolidatedData, endian))
 					if err != nil {
 						log.Println("decodeDirectoryPayload:", err)
 					}
 
-					list = entryList
+					ret = entryList
 
 					if err := conn.Disconnect(); err != nil {
-						return nil, errors.Wrap(err, "conn.Disconnect")
+						return ret, errors.Wrap(err, "conn.Disconnect")
 					}
 					break
 				}
@@ -162,7 +163,7 @@ func requestDirectoryList(addr string, debug bool) ([]DirectoryEntry, error) {
 		}
 	}
 
-	return list, nil
+	return ret, nil
 }
 
 func main() {
@@ -190,7 +191,7 @@ func main() {
 				return errors.Wrap(err, "error requesting list")
 			}
 
-			for _, entry := range list {
+			for _, entry := range list.Entries {
 				fmt.Println("---")
 				fmt.Println(entry)
 			}
