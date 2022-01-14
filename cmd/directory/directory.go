@@ -14,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/ss-continuum/ssc/pkg/bytestream"
 	"github.com/ss-continuum/ssc/pkg/logbytes"
+	"github.com/ss-continuum/ssc/pkg/packetmap"
 )
 
 const directoryServerPort = 4990
@@ -54,8 +55,8 @@ func requestDirectoryList(addr string, debug bool) ([]DirectoryEntry, error) {
 
 	conn.Debug = debug
 
-	packets := NewPacketMap()
-	packets0x0a := NewPacketMap()
+	packets := packetmap.New()
+	packets0x0a := packetmap.New()
 
 	if err := conn.Login(0); err != nil {
 		log.Fatalln(err)

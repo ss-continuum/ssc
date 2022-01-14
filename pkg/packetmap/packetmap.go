@@ -1,4 +1,4 @@
-package main
+package packetmap
 
 import (
 	"bytes"
@@ -7,9 +7,10 @@ import (
 	"sort"
 )
 
+// PacketMap is useful when handling a stream of packets that needs to be ordered and bundled together.
 type PacketMap map[uint32][]byte
 
-func NewPacketMap() PacketMap {
+func New() PacketMap {
 	return make(map[uint32][]byte)
 }
 
