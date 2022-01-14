@@ -13,36 +13,12 @@ import (
 	"github.com/peterbourgon/ff/v3/ffcli"
 	"github.com/pkg/errors"
 	"github.com/ss-continuum/ssc/pkg/bytestream"
-	"github.com/ss-continuum/ssc/pkg/logbytes"
 	"github.com/ss-continuum/ssc/pkg/packetmap"
 )
 
 const directoryServerPort = 4990
 
 var endian = binary.LittleEndian
-
-func decodeDirectoryPayload(data []byte) ([]DirectoryEntry, error) {
-	stream := bytestream.New(data, endian)
-
-	if h, err := stream.ReadByte(); err != nil {
-		return nil, errors.Wrap(err, "failed to read header")
-	} else if h != 0x01 {
-		log.Printf("unexpected header: 0x%02x\n", h)
-	}
-
-	var list []DirectoryEntry
-
-	for stream.Len() > 0 {
-		entry, err := NewDirectoryEntryFromStream(stream)
-		if err != nil {
-			return nil, errors.Wrap(err, "NewDirectoryEntryFromStream")
-		}
-
-		list = append(list, entry)
-	}
-
-	return list, nil
-}
 
 func requestDirectoryList(addr string, debug bool) ([]DirectoryEntry, error) {
 	var list []DirectoryEntry
@@ -101,14 +77,11 @@ func requestDirectoryList(addr string, debug bool) ([]DirectoryEntry, error) {
 				continue
 			}
 
-			//log.Printf("pkt %d -- 0x%02x 0x%02x\n", packetID, packetData[0], packetData[1])
-
 			if packetData[0] == 0x00 && packetData[1] == 0x09 {
 				consolidatedData := packets.Bytes()
 				packets.Clear()
-				logbytes.Log(consolidatedData)
 
-				entryList, err := decodeDirectoryPayload(consolidatedData)
+				entryList, err := NewDirectoryEntryList(bytestream.New(consolidatedData, endian))
 				if err != nil {
 					log.Println("decodeDirectoryPayload:", err)
 				}
@@ -125,7 +98,7 @@ func requestDirectoryList(addr string, debug bool) ([]DirectoryEntry, error) {
 					consolidatedData := packets0x0a.Bytes()
 					packets0x0a.Clear()
 
-					entryList, err := decodeDirectoryPayload(consolidatedData)
+					entryList, err := NewDirectoryEntryList(bytestream.New(consolidatedData, endian))
 					if err != nil {
 						log.Println("decodeDirectoryPayload:", err)
 					}
@@ -173,11 +146,7 @@ func requestDirectoryList(addr string, debug bool) ([]DirectoryEntry, error) {
 		}
 		if data[0] == 0x00 && data[1] == 0x04 {
 			id := endian.Uint32(data[2:6])
-			//payload := []byte{0x00, 0x04, 0, 0, 0, 0}
-			//endian.PutUint32(payload[2:6], id)
-			//if _, err := conn.Write(payload); err != nil {
-			//	log.Println("Write:", err)
-			//}
+
 			if id == 0 {
 				// send disconnect
 				err := conn.Disconnect()

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"strings"
 
@@ -20,7 +21,28 @@ type DirectoryEntry struct {
 	Version      uint32
 }
 
-func NewDirectoryEntryFromStream(stream *bytestream.ByteStream) (DirectoryEntry, error) {
+func NewDirectoryEntryList(stream *bytestream.ByteStream) ([]DirectoryEntry, error) {
+	if h, err := stream.ReadByte(); err != nil {
+		return nil, errors.Wrap(err, "failed to read header")
+	} else if h != 0x01 {
+		log.Printf("unexpected header: 0x%02x\n", h)
+	}
+
+	var list []DirectoryEntry
+
+	for stream.Len() > 0 {
+		entry, err := NewDirectoryEntry(stream)
+		if err != nil {
+			return nil, errors.Wrap(err, "NewDirectoryEntry")
+		}
+
+		list = append(list, entry)
+	}
+
+	return list, nil
+}
+
+func NewDirectoryEntry(stream *bytestream.ByteStream) (DirectoryEntry, error) {
 	ipAddress := make([]byte, 4)
 	if n, err := stream.Read(ipAddress); err != nil {
 		return DirectoryEntry{}, errors.Wrap(err, "stream.Read")
