@@ -18,6 +18,19 @@ Usage of ssc-ping:
     	server port (default 5001)
 ```
 
+## Directory
+
+* `ssc-directory -help`
+
+```
+USAGE
+  ./bin/ssc-directory [-debug] [-port <portnumber>] address
+
+FLAGS
+  -debug=false  log network packets
+  -port 4990    server port
+```
+
 ## Author
 
 Sergio Moura
