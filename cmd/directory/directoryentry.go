@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
-	"github.com/ss-continuum/ssc/pkg/bytestream"
 	"net"
 	"strings"
+
+	"github.com/pkg/errors"
+	"github.com/ss-continuum/ssc/pkg/bytestream"
 )
 
 type DirectoryEntry struct {
@@ -44,10 +45,11 @@ func NewDirectoryEntryFromStream(stream *bytestream.ByteStream) (DirectoryEntry,
 	}
 
 	serverName := make([]byte, 64)
+	currentOffset := stream.Size() - int64(stream.Len())
 	if n, err := stream.Read(serverName); err != nil {
 		return DirectoryEntry{}, errors.Wrap(err, "stream.Read")
 	} else if n != len(serverName) {
-		return DirectoryEntry{}, errors.Errorf("failed to read serverName: expected %d, got %d", len(serverName), n)
+		return DirectoryEntry{}, errors.Errorf("failed to read serverName: expected %d, got %d (offset %v)", len(serverName), n, currentOffset)
 	}
 	serverDescription, err := stream.ReadZeroString()
 	if err != nil {

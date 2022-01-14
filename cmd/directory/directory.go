@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
 	"flag"
@@ -9,47 +8,25 @@ import (
 	"io"
 	"log"
 	"os"
-	"sort"
 	"time"
 
 	"github.com/peterbourgon/ff/v3/ffcli"
 	"github.com/pkg/errors"
 	"github.com/ss-continuum/ssc/pkg/bytestream"
+	"github.com/ss-continuum/ssc/pkg/logbytes"
 )
 
 const directoryServerPort = 4990
 
 var endian = binary.LittleEndian
 
-func sortUint32(slice []uint32) {
-	sort.Slice(slice, func(i, j int) bool {
-		return slice[i] < slice[j]
-	})
-}
-
-func consolidatePackets(packets map[uint32][]byte) []byte {
-	keys := make([]uint32, len(packets))
-	i := 0
-	for k := range packets {
-		keys[i] = k
-		i++
-	}
-	sortUint32(keys)
-
-	out := bytes.NewBuffer([]byte{})
-	for _, k := range keys {
-		out.Write(packets[k][2:])
-	}
-
-	return out.Bytes()
-}
-
 func decodeDirectoryPayload(data []byte) ([]DirectoryEntry, error) {
 	stream := bytestream.New(data, endian)
 
-	// what are the first 5 bytes?
-	if _, err := stream.Seek(5, io.SeekCurrent); err != nil {
-		return nil, errors.Wrap(err, "stream.Seek")
+	if h, err := stream.ReadByte(); err != nil {
+		return nil, errors.Wrap(err, "failed to read header")
+	} else if h != 0x01 {
+		log.Printf("unexpected header: 0x%02x\n", h)
 	}
 
 	var list []DirectoryEntry
@@ -77,7 +54,8 @@ func requestDirectoryList(addr string, debug bool) ([]DirectoryEntry, error) {
 
 	conn.Debug = debug
 
-	packets := make(map[uint32][]byte)
+	packets := NewPacketMap()
+	packets0x0a := NewPacketMap()
 
 	if err := conn.Login(0); err != nil {
 		log.Fatalln(err)
@@ -108,7 +86,15 @@ func requestDirectoryList(addr string, debug bool) ([]DirectoryEntry, error) {
 		if data[0] == 0x00 && data[1] == 0x03 {
 			packetID := endian.Uint32(data[2:6])
 			packetData := data[6:]
-			packets[packetID] = packetData
+			if packetData[0] == 0x00 && (packetData[1] == 0x08 || packetData[1] == 0x09) {
+				packets.Add(packetID, packetData)
+			} else if packetData[0] == 0x00 && packetData[1] == 0x0a {
+				packets0x0a.Add(packetID, packetData)
+			} else {
+				log.Printf("I don't know what to do with packet 0x%02x 0x%02x inside a 0x00 0x03 packet\n", packetData[0], packetData[1])
+				continue
+			}
+
 			if err := conn.Ack(packetID); err != nil {
 				log.Println("cannot ack packet", packetID)
 				continue
@@ -117,9 +103,9 @@ func requestDirectoryList(addr string, debug bool) ([]DirectoryEntry, error) {
 			//log.Printf("pkt %d -- 0x%02x 0x%02x\n", packetID, packetData[0], packetData[1])
 
 			if packetData[0] == 0x00 && packetData[1] == 0x09 {
-				consolidatedData := consolidatePackets(packets)
-				//logbytes.Log(consolidatedData)
-				packets = nil
+				consolidatedData := packets.Bytes()
+				packets.Clear()
+				logbytes.Log(consolidatedData)
 
 				entryList, err := decodeDirectoryPayload(consolidatedData)
 				if err != nil {
@@ -132,6 +118,24 @@ func requestDirectoryList(addr string, debug bool) ([]DirectoryEntry, error) {
 					return nil, errors.Wrap(err, "conn.Disconnect")
 				}
 				break
+			} else if packetData[0] == 0x00 && packetData[1] == 0x0a {
+				expectedLen := int(endian.Uint32(packetData[2:6]))
+				if packets0x0a.Size() >= expectedLen {
+					consolidatedData := packets0x0a.Bytes()
+					packets0x0a.Clear()
+
+					entryList, err := decodeDirectoryPayload(consolidatedData)
+					if err != nil {
+						log.Println("decodeDirectoryPayload:", err)
+					}
+
+					list = entryList
+
+					if err := conn.Disconnect(); err != nil {
+						return nil, errors.Wrap(err, "conn.Disconnect")
+					}
+					break
+				}
 			}
 		}
 		if data[0] == 0x00 && data[1] == 0x0e {
