@@ -2,8 +2,6 @@ package packetmap
 
 import (
 	"bytes"
-	"fmt"
-	"github.com/ss-continuum/ssc/pkg/logbytes"
 	"sort"
 )
 
@@ -51,7 +49,6 @@ func (p PacketMap) Bytes() []byte {
 	out := bytes.NewBuffer([]byte{})
 	for _, k := range keys {
 		data := p[k]
-		logbytes.LogPrefix(data, fmt.Sprintf("packet %d", k))
 		if data[0] == 0x00 && (data[1] == 0x08 || data[1] == 0x09) {
 			// remove packet header (2 bytes)
 			out.Write(data[2:])
